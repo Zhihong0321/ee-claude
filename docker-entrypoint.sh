@@ -1,6 +1,9 @@
 #!/bin/sh
 set -e
 
+APP_USER=appuser
+APP_UID=10001
+
 # The app hardcodes paths under ./workspace (uploads, documents, specs,
 # decisions, memory, DB_SCHEMA.md). Production's persistent volume is
 # mounted at /storage, so redirect workspace/ there via a symlink rather
@@ -16,8 +19,15 @@ if [ -d /storage ] && [ ! -L /app/workspace ]; then
     ln -s /storage /app/workspace
 fi
 
+# Container starts as root (default). The app itself must run as a
+# non-root user (the bundled Claude Code CLI refuses --dangerously-skip-
+# permissions as root), so hand ownership of everything it needs to write
+# to over to appuser, then drop privileges for the actual process.
+[ -d /storage ] && chown -R "$APP_UID:$APP_UID" /storage
+chown -R "$APP_UID:$APP_UID" /app
+
 echo "Running database migrations..."
-alembic upgrade head
+su "$APP_USER" -s /bin/sh -c "alembic upgrade head"
 
 echo "Starting EE Finance Agent on port ${PORT:-8080}..."
-exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8080}"
+exec su "$APP_USER" -s /bin/sh -c "exec uvicorn app.main:app --host 0.0.0.0 --port \"\${PORT:-8080}\""

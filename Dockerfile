@@ -9,8 +9,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
 COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # ---- Runtime stage ----
 FROM python:3.14-slim
@@ -34,8 +37,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /root/.local /root/.local
-ENV PATH=/root/.local/bin:$PATH \
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
@@ -47,6 +50,14 @@ COPY . .
 # /app/workspace -> /storage at boot. rules/ (Builder-mode generated code) is
 # not persisted this way - it's expected to be pushed to GitHub instead.
 RUN mkdir -p workspace/uploads workspace/documents workspace/decisions workspace/specs workspace/memory rules
+
+# The bundled Claude Code CLI (spawned by claude_agent_sdk) refuses to run
+# with permission_mode="bypassPermissions" (--dangerously-skip-permissions)
+# as root, for its own safety reasons - so the app must run as a non-root
+# user. docker-entrypoint.sh still starts as root (the container's default
+# user) to fix up ownership of the mounted volume, then drops to this user
+# via `su` before running migrations/starting the server.
+RUN useradd --create-home --uid 10001 appuser
 
 EXPOSE 8080
 
