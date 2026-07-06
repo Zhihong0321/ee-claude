@@ -26,8 +26,14 @@ fi
 [ -d /storage ] && chown -R "$APP_UID:$APP_UID" /storage
 chown -R "$APP_UID:$APP_UID" /app
 
+# Plain `su user -c cmd` (without -/-l) does NOT reset $HOME - it stays
+# /root, inherited from this root shell. The bundled Claude Code CLI writes
+# session state to $HOME/.claude, which appuser can't do under /root
+# (permission denied), so every chat turn was failing. Set HOME explicitly.
+APP_HOME="/home/$APP_USER"
+
 echo "Running database migrations..."
-su "$APP_USER" -s /bin/sh -c "alembic upgrade head"
+su "$APP_USER" -s /bin/sh -c "export HOME=$APP_HOME; alembic upgrade head"
 
 echo "Starting EE Finance Agent on port ${PORT:-8080}..."
-exec su "$APP_USER" -s /bin/sh -c "exec uvicorn app.main:app --host 0.0.0.0 --port \"\${PORT:-8080}\""
+exec su "$APP_USER" -s /bin/sh -c "export HOME=$APP_HOME; exec uvicorn app.main:app --host 0.0.0.0 --port \"\${PORT:-8080}\""
