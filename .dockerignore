@@ -1,0 +1,13 @@
+.venv
+__pycache__
+**/__pycache__
+*.pyc
+.env
+*.bak_*
+*.log
+.git
+.claude
+workspace/uploads
+workspace/documents
+Start Finance Agent.bat
+setup_local_db.ps1

@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+*.bak_*
+*.log
+
+# Runtime-generated data (persisted via the Railway volume in production,
+# not tracked in git) - keep DB_SCHEMA.md, memory/, decisions/, specs/ though,
+# those are accumulated finance-agent knowledge.
+workspace/uploads/
+workspace/documents/

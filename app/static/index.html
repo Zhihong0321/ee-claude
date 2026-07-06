@@ -1,0 +1,2282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EE Finance Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper: #0a0e17;
+    --paper-raised: #151a24;
+    --ink: #e8eaed;
+    --ink-soft: #9ca3af;
+    --rule: rgba(255, 255, 255, 0.05);
+    --rule-strong: rgba(255, 255, 255, 0.1);
+    --gold: #00d4ff;
+    --gold-soft: rgba(0, 212, 255, 0.15);
+    --danger: #ef4444;
+    --shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.5);
+    --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+    --mono: "IBM Plex Mono", "SF Mono", Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    font-family: var(--mono);
+    background: var(--paper);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* subtle noise texture */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.02;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    z-index: 0;
+  }
+
+  #app { position: relative; z-index: 1; height: 100%; }
+
+  /* ---------- Login ---------- */
+  .login-screen {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .login-card {
+    width: 100%;
+    max-width: 380px;
+    background: var(--paper-raised);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 48px 40px 40px;
+    box-shadow: var(--shadow);
+    position: relative;
+  }
+
+  .login-card::before {
+    content: "";
+    position: absolute;
+    top: 10px; left: 10px; right: 10px; bottom: 10px;
+    border: 1px solid var(--rule);
+    pointer-events: none;
+  }
+
+  .brand-mark {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 6px;
+  }
+
+  .brand-title {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 500;
+    font-size: 32px;
+    line-height: 1.15;
+    margin: 0 0 4px;
+    color: var(--ink);
+  }
+
+  .brand-sub {
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-bottom: 36px;
+  }
+
+  .field {
+    margin-bottom: 20px;
+  }
+
+  .field label {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 8px;
+  }
+
+  .field input {
+    width: 100%;
+    border: none;
+    border-bottom: 1px solid var(--rule-strong);
+    background: transparent;
+    padding: 8px 2px;
+    font-family: var(--mono);
+    font-size: 15px;
+    color: var(--ink);
+    outline: none;
+    transition: border-color 0.2s ease;
+  }
+
+  .field input:focus {
+    border-bottom-color: var(--gold);
+  }
+
+  .btn-primary {
+    width: 100%;
+    background: var(--ink);
+    color: var(--paper-raised);
+    border: none;
+    padding: 13px 16px;
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    margin-top: 12px;
+    transition: background 0.2s ease;
+  }
+
+  .btn-primary:hover { background: var(--gold); }
+  .btn-primary:disabled { opacity: 0.5; cursor: default; }
+
+  .login-error {
+    color: var(--danger);
+    font-size: 12.5px;
+    margin-top: 16px;
+    min-height: 1em;
+  }
+
+  /* ---------- App shell ---------- */
+  .shell {
+    display: none;
+    height: 100%;
+    flex-direction: column;
+  }
+  .shell.active { display: flex; }
+
+  /* Mobile: sidebar becomes drawer */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 85vw;
+    max-width: 320px;
+    background: var(--paper-raised);
+    border-right: 1px solid var(--rule);
+    display: flex;
+    flex-direction: column;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    z-index: 1000;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+    z-index: 999;
+  }
+
+  .sidebar-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .sidebar-header {
+    padding: 22px 20px 16px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .sidebar-header .brand-mark { margin-bottom: 2px; }
+  .sidebar-header .brand-title { font-size: 21px; margin-bottom: 14px; }
+
+  .new-chat-btn {
+    width: 100%;
+    border: 1px solid var(--rule-strong);
+    background: transparent;
+    color: var(--ink);
+    padding: 9px 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .new-chat-btn:hover { background: var(--gold); border-color: var(--gold); color: #fff; }
+
+  .new-chat-row { display: flex; gap: 8px; }
+  .new-chat-row .new-chat-btn { flex: 1; }
+  .new-build-btn {
+    border-color: var(--gold);
+    color: var(--gold);
+  }
+  .new-build-btn:hover { background: var(--ink); border-color: var(--ink); color: var(--paper-raised); }
+
+  .mode-badge {
+    display: inline-block;
+    font-size: 8.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 1px 5px;
+    border: 1px solid var(--gold);
+    color: var(--gold);
+    border-radius: 2px;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  /* Build activity feed (builder mode) */
+  .activity {
+    margin: 4px 0 2px;
+    padding-left: 18px;
+    border-left: 2px solid var(--rule-strong);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .activity-line {
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    font-style: italic;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .activity-line::before { content: "› "; color: var(--gold); font-style: normal; }
+
+  .usage-line {
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--ink-soft);
+    opacity: 0.75;
+  }
+
+  .session-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+  }
+
+  .session-item {
+    padding: 12px 20px;
+    cursor: pointer;
+    border-left: 2px solid transparent;
+    font-size: 13px;
+    color: var(--ink-soft);
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: all 0.15s ease;
+  }
+
+  .session-item:hover { background: var(--gold-soft); color: var(--ink); }
+  .session-item.active {
+    border-left-color: var(--gold);
+    background: var(--gold-soft);
+    color: var(--ink);
+    font-weight: 500;
+  }
+
+  .session-empty {
+    padding: 20px;
+    font-size: 12px;
+    color: var(--ink-soft);
+    font-style: italic;
+  }
+
+  .sidebar-footer {
+    border-top: 1px solid var(--rule);
+    padding: 14px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+
+  .sidebar-footer .username { color: var(--ink); font-weight: 500; }
+
+  .logout-link {
+    color: var(--gold);
+    cursor: pointer;
+    text-decoration: none;
+    letter-spacing: 0.04em;
+  }
+  .logout-link:hover { text-decoration: underline; }
+
+  /* ---------- Main chat pane ---------- */
+  .main {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-width: 0;
+  }
+
+  .main-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .menu-toggle {
+    width: 40px;
+    height: 40px;
+    border: none;
+    background: transparent;
+    color: var(--ink);
+    font-size: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    flex-shrink: 0;
+  }
+
+  .main-header .title {
+    font-family: var(--serif);
+    font-size: 16px;
+    color: var(--ink);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .main-header .subtitle {
+    display: none;
+  }
+
+  .session-usage-card {
+    margin-left: auto;
+    display: none;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 10px;
+    color: var(--ink-soft);
+    white-space: nowrap;
+    width: 100%;
+    justify-content: space-around;
+    padding-top: 8px;
+  }
+  .session-usage-card.visible { display: flex; }
+  .session-usage-card .usage-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .session-usage-card .usage-stat .value { font-size: 12px; color: var(--ink); font-weight: 500; }
+  .session-usage-card .usage-stat .label {
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .session-usage-card .usage-stat.cost .value { color: var(--gold); }
+
+  .main-header .subtitle {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  .session-usage-card {
+    margin-left: auto;
+    display: none;
+    align-items: baseline;
+    gap: 14px;
+    font-size: 11px;
+    color: var(--ink-soft);
+    white-space: nowrap;
+  }
+  .session-usage-card.visible { display: flex; }
+  .session-usage-card .usage-stat { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+  .session-usage-card .usage-stat .value { font-size: 13px; color: var(--ink); font-weight: 500; }
+  .session-usage-card .usage-stat .label {
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .session-usage-card .usage-stat.cost .value { color: var(--gold); }
+
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 16px 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+  }
+
+  .messages-empty {
+    margin: auto;
+    text-align: center;
+    color: var(--ink-soft);
+    max-width: 420px;
+  }
+  .messages-empty .title { font-family: var(--serif); font-style: italic; font-size: 22px; color: var(--ink); margin-bottom: 8px; }
+  .messages-empty .body { font-size: 13px; line-height: 1.6; }
+
+  .msg { max-width: 640px; }
+  .msg-meta {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .msg-body {
+    font-size: 14.5px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+  .msg.user {
+    align-self: flex-end;
+    text-align: right;
+  }
+  .msg.user .msg-meta { color: var(--ink-soft); }
+  .msg.user .msg-body { color: var(--ink); }
+
+  .msg.assistant {
+    align-self: flex-start;
+    border-left: 2px solid var(--gold);
+    padding-left: 18px;
+  }
+  .msg.assistant .msg-meta { color: var(--gold); }
+  .msg.assistant .msg-body { color: var(--ink); }
+
+  .msg.thinking .msg-body { color: var(--ink-soft); font-style: italic; }
+
+  .composer {
+    border-top: 1px solid var(--rule);
+    padding: 12px 16px;
+    background: var(--paper-raised);
+  }
+
+  .composer-options {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 10px;
+  }
+
+  .option-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .option-group span {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  .option-group select {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink);
+    background: var(--paper-raised);
+    border: 1px solid var(--rule-strong);
+    padding: 4px 8px;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.2s ease;
+  }
+
+  .option-group select:hover,
+  .option-group select:focus {
+    border-color: var(--gold);
+  }
+
+  .attachments-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .attachment-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--gold-soft);
+    border: 1px solid var(--rule-strong);
+    border-radius: 2px;
+    padding: 4px 8px;
+    font-size: 11.5px;
+    color: var(--ink);
+    max-width: 220px;
+  }
+
+  .attachment-chip.image { padding: 4px; }
+
+  .attachment-chip .thumb {
+    width: 28px;
+    height: 28px;
+    object-fit: cover;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  .attachment-chip .name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .attachment-chip .remove {
+    cursor: pointer;
+    color: var(--danger);
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  .composer-inner.drag-over {
+    border-color: var(--gold);
+    background: var(--gold-soft);
+  }
+
+  .msg-attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .msg-attachments .attachment-chip .remove { display: none; }
+
+  .attach-btn {
+    background: transparent;
+    border: 1px solid var(--rule-strong);
+    color: var(--ink-soft);
+    padding: 10px 12px;
+    font-family: var(--mono);
+    font-size: 15px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+  }
+  .attach-btn:hover:not(:disabled) { background: var(--gold-soft); border-color: var(--gold); color: var(--ink); }
+  .attach-btn:disabled { opacity: 0.4; cursor: default; }
+
+  .composer-inner {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    background: var(--paper-raised);
+    border: 1px solid var(--rule-strong);
+    padding: 10px 10px 10px 18px;
+  }
+
+  .composer textarea {
+    flex: 1;
+    border: none;
+    background: transparent;
+    outline: none;
+    resize: none;
+    font-family: var(--mono);
+    font-size: 16px;
+    color: var(--ink);
+    line-height: 1.5;
+    max-height: 160px;
+    padding: 6px 0;
+  }
+
+  .send-btn {
+    background: var(--ink);
+    color: var(--paper-raised);
+    border: none;
+    padding: 11px 18px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    flex-shrink: 0;
+  }
+  .send-btn:hover:not(:disabled) { background: var(--gold); }
+  .send-btn:disabled { opacity: 0.45; cursor: default; }
+
+  .hidden { display: none !important; }
+
+  /* ---------- Settings ---------- */
+  .settings-btn {
+    background: transparent;
+    border: none;
+    color: var(--ink-soft);
+    cursor: pointer;
+    font-size: 15px;
+    padding: 2px 4px;
+    transition: color 0.2s ease;
+  }
+  .settings-btn:hover { color: var(--gold); }
+
+  /* ---------- Document library ---------- */
+  .doc-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--gold-soft);
+    border: 1px solid rgba(156,122,60,0.35);
+    border-radius: 2px;
+    padding: 10px 14px;
+    margin-top: 10px;
+    text-decoration: none;
+    max-width: 340px;
+    transition: all 0.15s ease;
+  }
+  .doc-card:hover { border-color: var(--gold); background: rgba(156,122,60,0.2); }
+  .doc-card .doc-icon { font-size: 18px; flex-shrink: 0; }
+  .doc-card .doc-meta { min-width: 0; }
+  .doc-card .doc-title {
+    font-size: 13px;
+    color: var(--ink);
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .doc-card .doc-type {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--gold);
+  }
+
+  .library-filter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .library-filter select {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink);
+    background: var(--paper);
+    border: 1px solid var(--rule-strong);
+    padding: 5px 8px;
+    outline: none;
+  }
+
+  .library-list { display: flex; flex-direction: column; gap: 2px; }
+  .library-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 4px;
+    border-bottom: 1px solid var(--rule);
+    text-decoration: none;
+    color: inherit;
+  }
+  .library-row:hover .library-row-title { color: var(--gold); }
+  .library-row-main { min-width: 0; }
+  .library-row-title {
+    font-size: 13.5px;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: color 0.15s ease;
+  }
+  .library-row-sub {
+    font-size: 11px;
+    color: var(--ink-soft);
+    margin-top: 2px;
+  }
+  .library-empty {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    font-style: italic;
+    padding: 10px 4px;
+  }
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(28, 36, 48, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    padding: 24px;
+  }
+  .modal-overlay.hidden { display: none !important; }
+
+  .modal-card {
+    width: 100%;
+    max-width: 520px;
+    max-height: 86vh;
+    overflow-y: auto;
+    background: var(--paper-raised);
+    border: 1px solid var(--rule);
+    box-shadow: var(--shadow);
+    padding: 32px 36px;
+    position: relative;
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+
+  .modal-title {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 22px;
+    color: var(--ink);
+  }
+
+  .modal-close {
+    background: transparent;
+    border: none;
+    color: var(--ink-soft);
+    font-size: 20px;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .modal-close:hover { color: var(--danger); }
+
+  .modal-sub {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    margin-bottom: 28px;
+  }
+
+  .setting-row {
+    margin-bottom: 22px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .setting-row:last-of-type { border-bottom: none; }
+  .setting-row.paired {
+    margin-bottom: 14px;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+
+  .setting-label {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+
+  .setting-desc {
+    font-size: 12px;
+    color: var(--ink-soft);
+    line-height: 1.5;
+    margin-bottom: 10px;
+  }
+
+  .setting-current {
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    margin-bottom: 8px;
+  }
+  .setting-current .status-set { color: var(--gold); }
+  .setting-current .status-unset { color: var(--danger); }
+
+  .setting-row input {
+    width: 100%;
+    border: none;
+    border-bottom: 1px solid var(--rule-strong);
+    background: transparent;
+    padding: 7px 2px;
+    font-family: var(--mono);
+    font-size: 13.5px;
+    color: var(--ink);
+    outline: none;
+    transition: border-color 0.2s ease;
+  }
+  .setting-row input:focus { border-bottom-color: var(--gold); }
+
+  .settings-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 8px;
+  }
+
+  .settings-status-msg {
+    font-size: 12px;
+    color: var(--gold);
+    min-height: 1em;
+  }
+  .settings-status-msg.error { color: var(--danger); }
+
+  /* ---------- Tutorials (mobile-first slideshow) ---------- */
+  .tut-fab {
+    position: fixed;
+    top: 20px;
+    right: 70px;
+    z-index: 15;
+    display: none;
+    align-items: center;
+    gap: 6px;
+    background: var(--paper-raised);
+    border: 1px solid var(--gold);
+    color: var(--gold);
+    border-radius: 999px;
+    padding: 7px 13px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    box-shadow: 0 6px 18px -8px rgba(28,36,48,0.4);
+    transition: all 0.2s ease;
+  }
+  .tut-fab.visible { display: inline-flex; }
+  .tut-fab:hover { background: var(--gold); color: #fff; }
+
+  .tut-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background: rgba(20, 26, 36, 0.62);
+    backdrop-filter: blur(3px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .tut-overlay.hidden { display: none !important; }
+
+  .tut-card {
+    position: relative;
+    width: 100%;
+    max-width: 400px;
+    height: 100%;
+    max-height: 760px;
+    background:
+      radial-gradient(ellipse 500px 340px at 50% -10%, rgba(156,122,60,0.16), transparent 65%),
+      var(--paper-raised);
+    border: 1px solid var(--rule);
+    border-radius: 18px;
+    box-shadow: 0 30px 80px -20px rgba(20,26,36,0.7);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* story-style progress segments */
+  .tut-progress {
+    display: flex;
+    gap: 5px;
+    padding: 14px 16px 4px;
+    flex-shrink: 0;
+  }
+  .tut-seg {
+    flex: 1;
+    height: 3px;
+    border-radius: 3px;
+    background: var(--rule-strong);
+    overflow: hidden;
+    cursor: pointer;
+  }
+  .tut-seg > i {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: var(--gold);
+    transition: width 0.3s ease;
+  }
+  .tut-seg.done > i { width: 100%; }
+  .tut-seg.active > i { width: 100%; }
+
+  .tut-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 18px 0;
+    flex-shrink: 0;
+  }
+  .tut-series-label {
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--gold);
+  }
+  .tut-close {
+    background: transparent;
+    border: none;
+    color: var(--ink-soft);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 2px 4px;
+  }
+  .tut-close:hover { color: var(--danger); }
+  .tut-topbar-right { display: flex; align-items: center; gap: 8px; }
+  .tut-lang {
+    background: transparent;
+    border: 1px solid var(--rule-strong);
+    color: var(--ink-soft);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    border-radius: 999px;
+    padding: 3px 10px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+  }
+  .tut-lang:hover { border-color: var(--gold); color: var(--gold); }
+
+  /* swipeable stage */
+  .tut-stage {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 8px 30px 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
+    touch-action: pan-y;
+  }
+  .tut-stage-inner { animation: tutIn 0.32s ease both; }
+  @keyframes tutIn {
+    from { opacity: 0; transform: translateX(var(--tut-dir, 18px)); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  .tut-icon {
+    width: 74px;
+    height: 74px;
+    margin: 0 auto 20px;
+    border-radius: 20px;
+    background: var(--gold-soft);
+    border: 1px solid rgba(156,122,60,0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gold);
+  }
+  .tut-icon svg { width: 38px; height: 38px; }
+
+  .tut-tag {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 10px;
+  }
+  .tut-title {
+    font-family: var(--serif);
+    font-size: 27px;
+    line-height: 1.15;
+    color: var(--ink);
+    margin: 0 0 14px;
+  }
+  .tut-title .em { font-style: italic; }
+  .tut-body {
+    font-size: 14px;
+    line-height: 1.65;
+    color: var(--ink-soft);
+  }
+  .tut-body b { color: var(--ink); font-weight: 600; }
+  .tut-body .pill {
+    display: inline-block;
+    background: var(--gold-soft);
+    border: 1px solid rgba(156,122,60,0.35);
+    color: var(--gold);
+    border-radius: 4px;
+    padding: 1px 7px;
+    font-size: 12.5px;
+    white-space: nowrap;
+  }
+  .tut-quote {
+    margin-top: 18px;
+    padding: 12px 14px;
+    border-left: 2px solid var(--gold);
+    background: rgba(156,122,60,0.07);
+    text-align: left;
+    font-size: 13px;
+    color: var(--ink);
+    line-height: 1.55;
+  }
+
+  /* vertical stepper (tall-friendly) */
+  .tut-steps {
+    text-align: left;
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .tut-step {
+    display: flex;
+    gap: 13px;
+    align-items: flex-start;
+    position: relative;
+    padding-bottom: 16px;
+  }
+  .tut-step:not(:last-child)::before {
+    content: "";
+    position: absolute;
+    left: 13px;
+    top: 26px;
+    bottom: 0;
+    width: 1px;
+    background: var(--rule-strong);
+  }
+  .tut-step-num {
+    flex-shrink: 0;
+    width: 27px;
+    height: 27px;
+    border-radius: 50%;
+    background: var(--paper-raised);
+    border: 1px solid var(--gold);
+    color: var(--gold);
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+  }
+  .tut-step-txt { padding-top: 3px; }
+  .tut-step-txt b { display: block; color: var(--ink); font-size: 13.5px; margin-bottom: 1px; }
+  .tut-step-txt span { font-size: 12px; color: var(--ink-soft); line-height: 1.45; }
+
+  /* footer nav */
+  .tut-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 18px 18px;
+    border-top: 1px solid var(--rule);
+    flex-shrink: 0;
+  }
+  .tut-btn {
+    background: transparent;
+    border: 1px solid var(--rule-strong);
+    color: var(--ink);
+    padding: 11px 18px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.18s ease;
+  }
+  .tut-btn:hover { border-color: var(--gold); color: var(--gold); }
+  .tut-btn.primary {
+    background: var(--ink);
+    color: var(--paper-raised);
+    border-color: var(--ink);
+    flex: 1;
+  }
+  .tut-btn.primary:hover { background: var(--gold); border-color: var(--gold); color: #fff; }
+  .tut-btn.ghost { border-color: transparent; color: var(--ink-soft); }
+  .tut-btn.ghost:hover { color: var(--gold); }
+  .tut-btn:disabled { opacity: 0; pointer-events: none; }
+  .tut-counter { font-size: 11px; color: var(--ink-soft); letter-spacing: 0.05em; }
+
+  /* series index */
+  .tut-index { padding: 10px 22px 22px; overflow-y: auto; }
+  .tut-index-title { font-family: var(--serif); font-style: italic; font-size: 24px; color: var(--ink); margin: 8px 0 4px; }
+  .tut-index-sub { font-size: 12.5px; color: var(--ink-soft); margin-bottom: 20px; line-height: 1.5; }
+  .tut-series-item {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    padding: 14px;
+    border: 1px solid var(--rule);
+    border-radius: 12px;
+    background: var(--paper);
+    cursor: pointer;
+    margin-bottom: 12px;
+    transition: all 0.18s ease;
+  }
+  .tut-series-item:hover { border-color: var(--gold); background: var(--gold-soft); }
+  .tut-series-item .tut-icon { width: 46px; height: 46px; margin: 0; border-radius: 12px; }
+  .tut-series-item .tut-icon svg { width: 24px; height: 24px; }
+  .tut-series-meta { text-align: left; min-width: 0; }
+  .tut-series-meta b { display: block; font-size: 14px; color: var(--ink); margin-bottom: 2px; }
+  .tut-series-meta span { font-size: 12px; color: var(--ink-soft); line-height: 1.4; }
+  .tut-series-count { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); margin-top: 5px; }
+
+  @media (max-width: 430px) {
+    .tut-overlay { padding: 0; }
+    .tut-card { border-radius: 0; max-height: none; }
+  }
+
+  /* Desktop view - restore sidebar */
+  @media (min-width: 768px) {
+    .shell.active {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+    }
+
+    .sidebar {
+      position: static;
+      transform: none;
+      width: auto;
+      max-width: none;
+    }
+
+    .sidebar-overlay {
+      display: none;
+    }
+
+    .menu-toggle {
+      display: none;
+    }
+
+    .main-header {
+      padding: 20px 40px;
+      flex-wrap: nowrap;
+    }
+
+    .main-header .title {
+      font-size: 19px;
+    }
+
+    .main-header .subtitle {
+      display: inline;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+    }
+
+    .session-usage-card {
+      width: auto;
+      padding-top: 0;
+      justify-content: flex-end;
+    }
+
+    .session-usage-card .usage-stat {
+      align-items: flex-end;
+    }
+
+    .messages {
+      padding: 32px 40px;
+    }
+
+    .composer {
+      padding: 14px 40px 26px;
+    }
+
+    .composer textarea {
+      font-size: 14px;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="login-screen" id="loginScreen">
+    <div class="login-card">
+      <div class="brand-mark">Eternalgy</div>
+      <h1 class="brand-title">EE Finance Agent</h1>
+      <div class="brand-sub">Finance Department — internal access</div>
+      <form id="loginForm">
+        <div class="field">
+          <label for="username">Username</label>
+          <input type="text" id="username" autocomplete="username" required />
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input type="password" id="password" autocomplete="current-password" required />
+        </div>
+        <button class="btn-primary" type="submit" id="loginBtn">Sign In</button>
+        <div class="login-error" id="loginError"></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="shell" id="shell">
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <div class="brand-mark">Eternalgy</div>
+        <div class="brand-title">Finance Agent</div>
+        <div class="new-chat-row">
+          <button class="new-chat-btn" id="newChatBtn">+ Discuss</button>
+          <button class="new-chat-btn new-build-btn" id="newBuildBtn" title="Build a commission calculation">+ Build</button>
+        </div>
+      </div>
+      <div class="session-list" id="sessionList"></div>
+      <div class="sidebar-footer">
+        <span class="username" id="currentUsername"></span>
+        <span>
+          <button class="settings-btn" id="libraryBtn" title="Document library">📄</button>
+          <button class="settings-btn" id="settingsBtn" title="Settings">⚙</button>
+          <span class="logout-link" id="logoutBtn">Sign out</span>
+        </span>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="main-header">
+        <button class="menu-toggle" id="menuToggle" aria-label="Menu">☰</button>
+        <span class="title" id="mainTitle">Select a conversation</span>
+        <span class="subtitle" id="mainSubtitle"></span>
+        <div class="session-usage-card" id="sessionUsageCard">
+          <div class="usage-stat">
+            <span class="value" id="usageTokens">0</span>
+            <span class="label">Tokens</span>
+          </div>
+          <div class="usage-stat">
+            <span class="value" id="usageCacheRead">0</span>
+            <span class="label">Cache Read</span>
+          </div>
+          <div class="usage-stat cost">
+            <span class="value" id="usageCost">$0.0000</span>
+            <span class="label">Session Cost</span>
+          </div>
+        </div>
+      </div>
+      <div class="messages" id="messages">
+        <div class="messages-empty" id="messagesEmpty">
+          <div class="title">Ledger is open.</div>
+          <div class="body">Ask about invoices, payments, or agents — or start a new conversation from the sidebar.</div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="composer-options">
+          <label class="option-group">
+            <span>Model</span>
+            <select id="modelSelect"></select>
+          </label>
+          <label class="option-group">
+            <span>Thinking</span>
+            <select id="effortSelect"></select>
+          </label>
+        </div>
+        <div class="attachments-row" id="attachmentsRow"></div>
+        <div class="composer-inner">
+          <button class="attach-btn" id="attachBtn" type="button" disabled title="Attach file(s)">📎</button>
+          <input type="file" id="fileInput" multiple style="display:none" />
+          <textarea id="messageInput" rows="1" placeholder="Ask the Finance Agent…" disabled></textarea>
+          <button class="send-btn" id="sendBtn" disabled>Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden" id="settingsModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span class="modal-title">Settings</span>
+        <button class="modal-close" id="settingsCloseBtn">&times;</button>
+      </div>
+      <div class="modal-sub">Runtime configuration. Leave a field blank to keep the current value.</div>
+      <div id="settingsRows"></div>
+      <div class="settings-footer">
+        <span class="settings-status-msg" id="settingsStatusMsg"></span>
+        <button class="btn-primary" id="settingsSaveBtn" style="width:auto;">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden" id="libraryModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span class="modal-title">Document Library</span>
+        <button class="modal-close" id="libraryCloseBtn">&times;</button>
+      </div>
+      <div class="modal-sub">Documents the Finance Agent has generated as replies.</div>
+      <div class="library-filter">
+        <span style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-soft);">Show</span>
+        <select id="libraryFilter">
+          <option value="all">All documents</option>
+          <option value="session">This session only</option>
+        </select>
+      </div>
+      <div class="library-list" id="libraryList"></div>
+    </div>
+  </div>
+
+  <button class="tut-fab" id="tutorialFab" title="Guides & tutorials">🎓 Guide</button>
+
+  <div class="tut-overlay hidden" id="tutorialOverlay">
+    <div class="tut-card" id="tutorialCard"></div>
+  </div>
+
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+</div>
+
+<script>
+  const state = { user: null, sessions: [], activeSessionId: null, pendingAttachments: [] };
+
+  const el = (id) => document.getElementById(id);
+
+  async function api(path, options = {}) {
+    const res = await fetch(path, {
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      ...options,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || `Request failed (${res.status})`);
+    }
+    return res.status === 204 ? null : res.json();
+  }
+
+  function showLogin() {
+    el("loginScreen").style.display = "flex";
+    el("shell").classList.remove("active");
+    el("tutorialFab").classList.remove("visible");
+  }
+
+  function showShell() {
+    el("loginScreen").style.display = "none";
+    el("shell").classList.add("active");
+    el("tutorialFab").classList.add("visible");
+  }
+
+  async function boot() {
+    try {
+      state.user = await api("/api/me");
+      el("currentUsername").textContent = state.user.username;
+      showShell();
+      await loadChatOptions();
+      await loadSessions();
+    } catch {
+      showLogin();
+    }
+  }
+
+  async function loadChatOptions() {
+    const opts = await api("/api/chat/options");
+    const modelSelect = el("modelSelect");
+    modelSelect.innerHTML = "";
+    for (const m of opts.models) {
+      const option = document.createElement("option");
+      option.value = m.id;
+      option.textContent = m.label;
+      if (m.id === opts.default_model) option.selected = true;
+      modelSelect.appendChild(option);
+    }
+
+    const effortSelect = el("effortSelect");
+    effortSelect.innerHTML = "";
+    for (const level of opts.effort_levels) {
+      const option = document.createElement("option");
+      option.value = level;
+      option.textContent = level.toUpperCase();
+      if (level === opts.default_effort) option.selected = true;
+      effortSelect.appendChild(option);
+    }
+  }
+
+  el("loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const username = el("username").value.trim();
+    const password = el("password").value;
+    const btn = el("loginBtn");
+    const errBox = el("loginError");
+    errBox.textContent = "";
+    btn.disabled = true;
+    try {
+      state.user = await api("/api/login", { method: "POST", body: JSON.stringify({ username, password }) });
+      el("currentUsername").textContent = state.user.username;
+      showShell();
+      await loadChatOptions();
+      await loadSessions();
+    } catch (err) {
+      errBox.textContent = err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  el("logoutBtn").addEventListener("click", async () => {
+    await api("/api/logout", { method: "POST" });
+    state.user = null;
+    state.activeSessionId = null;
+    showLogin();
+  });
+
+  async function loadSessions() {
+    state.sessions = await api("/api/chat/sessions");
+    renderSessionList();
+    if (state.sessions.length && state.activeSessionId === null) {
+      selectSession(state.sessions[0].id);
+    } else if (!state.sessions.length) {
+      renderMessages([]);
+    }
+  }
+
+  function renderSessionList() {
+    const list = el("sessionList");
+    list.innerHTML = "";
+    if (!state.sessions.length) {
+      list.innerHTML = '<div class="session-empty">No conversations yet.</div>';
+      return;
+    }
+    for (const s of state.sessions) {
+      const item = document.createElement("div");
+      item.className = "session-item" + (s.id === state.activeSessionId ? " active" : "");
+      if (s.mode === "builder") {
+        const badge = document.createElement("span");
+        badge.className = "mode-badge";
+        badge.textContent = "Build";
+        item.appendChild(badge);
+      }
+      item.appendChild(document.createTextNode(s.title || "Untitled conversation"));
+      item.addEventListener("click", () => selectSession(s.id));
+      list.appendChild(item);
+    }
+  }
+
+  async function refreshUsageCard(sessionId) {
+    const card = el("sessionUsageCard");
+    if (sessionId === null) {
+      card.classList.remove("visible");
+      return;
+    }
+    try {
+      const usage = await api(`/api/chat/sessions/${sessionId}/usage`);
+      if (state.activeSessionId !== sessionId) return; // user switched sessions meanwhile
+      const totalTokens = usage.input_tokens + usage.output_tokens;
+      el("usageTokens").textContent = totalTokens.toLocaleString();
+      el("usageCacheRead").textContent = usage.cache_read_input_tokens.toLocaleString();
+      el("usageCost").textContent = `$${usage.cost_usd.toFixed(4)}`;
+      card.classList.add("visible");
+    } catch (err) {
+      card.classList.remove("visible");
+    }
+  }
+
+  async function createSession(mode) {
+    const session = await api("/api/chat/sessions", {
+      method: "POST",
+      body: JSON.stringify({ mode }),
+    });
+    state.sessions.unshift(session);
+    renderSessionList();
+    selectSession(session.id);
+  }
+
+  el("newChatBtn").addEventListener("click", () => createSession("discussion"));
+  el("newBuildBtn").addEventListener("click", () => createSession("builder"));
+
+  async function selectSession(id) {
+    state.activeSessionId = id;
+    state.pendingAttachments = [];
+    renderAttachmentsRow();
+    renderSessionList();
+    const s = state.sessions.find((x) => x.id === id);
+    const isBuilder = s && s.mode === "builder";
+    state.activeMode = isBuilder ? "builder" : "discussion";
+    el("mainTitle").textContent = (s && s.title) || (isBuilder ? "New build" : "Untitled conversation");
+    el("mainSubtitle").textContent = isBuilder ? "Builder mode" : `Session #${id}`;
+    el("messageInput").placeholder = isBuilder
+      ? "Describe the commission calculation you want to build…"
+      : "Ask the Finance Agent…";
+    el("messageInput").disabled = false;
+    el("sendBtn").disabled = false;
+    el("attachBtn").disabled = false;
+    const messages = await api(`/api/chat/sessions/${id}/messages`);
+    renderMessages(messages);
+    refreshUsageCard(id);
+  }
+
+  function renderAttachmentsRow() {
+    const row = el("attachmentsRow");
+    row.innerHTML = "";
+    state.pendingAttachments.forEach((a, idx) => {
+      row.appendChild(buildAttachmentChip(a, () => {
+        state.pendingAttachments.splice(idx, 1);
+        renderAttachmentsRow();
+      }));
+    });
+  }
+
+  const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
+  function isImage(filename) {
+    return IMAGE_EXT.test(filename || "");
+  }
+
+  function attachmentFileUrl(a) {
+    const storedName = a.path.split("/").pop();
+    return `/api/chat/sessions/${state.activeSessionId}/files/${encodeURIComponent(storedName)}`;
+  }
+
+  function buildAttachmentChip(a, onRemove) {
+    const chip = document.createElement("span");
+    const image = isImage(a.filename);
+    chip.className = "attachment-chip" + (image ? " image" : "");
+    if (image) {
+      const thumb = document.createElement("img");
+      thumb.className = "thumb";
+      thumb.src = attachmentFileUrl(a);
+      thumb.alt = a.filename;
+      chip.appendChild(thumb);
+    } else {
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = a.filename;
+      chip.appendChild(name);
+    }
+    if (onRemove) {
+      const remove = document.createElement("span");
+      remove.className = "remove";
+      remove.textContent = "×";
+      remove.addEventListener("click", onRemove);
+      chip.appendChild(remove);
+    }
+    return chip;
+  }
+
+  el("attachBtn").addEventListener("click", () => el("fileInput").click());
+
+  async function uploadFiles(files) {
+    if (!files.length || state.activeSessionId === null) return;
+    const attachBtn = el("attachBtn");
+    attachBtn.disabled = true;
+    try {
+      for (const file of files) {
+        const form = new FormData();
+        form.append("file", file);
+        const res = await fetch(`/api/chat/sessions/${state.activeSessionId}/upload`, {
+          method: "POST",
+          credentials: "same-origin",
+          body: form,
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.detail || `Upload failed (${res.status})`);
+        }
+        const uploaded = await res.json();
+        state.pendingAttachments.push(uploaded);
+      }
+      renderAttachmentsRow();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      attachBtn.disabled = false;
+    }
+  }
+
+  el("fileInput").addEventListener("change", (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    uploadFiles(files);
+  });
+
+  const composerInner = document.querySelector(".composer-inner");
+  ["dragenter", "dragover"].forEach((evt) =>
+    composerInner.addEventListener(evt, (e) => {
+      e.preventDefault();
+      if (state.activeSessionId !== null) composerInner.classList.add("drag-over");
+    })
+  );
+  ["dragleave", "dragend"].forEach((evt) =>
+    composerInner.addEventListener(evt, () => composerInner.classList.remove("drag-over"))
+  );
+  composerInner.addEventListener("drop", (e) => {
+    e.preventDefault();
+    composerInner.classList.remove("drag-over");
+    const files = Array.from(e.dataTransfer.files || []);
+    uploadFiles(files);
+  });
+
+  el("messageInput").addEventListener("paste", (e) => {
+    const items = Array.from(e.clipboardData?.items || []);
+    const files = items
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter(Boolean);
+    if (files.length) {
+      e.preventDefault();
+      uploadFiles(files);
+    }
+  });
+
+  function renderMessages(messages) {
+    const box = el("messages");
+    box.innerHTML = "";
+    if (!messages.length) {
+      box.innerHTML = `
+        <div class="messages-empty">
+          <div class="title">Ledger is open.</div>
+          <div class="body">Ask about invoices, payments, or agents.</div>
+        </div>`;
+      return;
+    }
+    for (const m of messages) {
+      box.appendChild(renderMessage(m));
+    }
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function setUsageLine(msgEl, usage) {
+    let line = msgEl.querySelector(".usage-line");
+    if (!line) {
+      line = document.createElement("div");
+      line.className = "usage-line";
+      msgEl.appendChild(line);
+    }
+    const cost =
+      typeof usage.cost_usd === "number" ? `$${usage.cost_usd.toFixed(4)}` : "n/a";
+    line.textContent =
+      `tokens — in: ${usage.input_tokens} · out: ${usage.output_tokens} · ` +
+      `cache write: ${usage.cache_creation_input_tokens} · cache read: ${usage.cache_read_input_tokens} · ` +
+      `${cost}`;
+  }
+
+  function addActivityLine(msgEl, text) {
+    let feed = msgEl.querySelector(".activity");
+    if (!feed) {
+      feed = document.createElement("div");
+      feed.className = "activity";
+      const meta = msgEl.querySelector(".msg-meta");
+      meta.insertAdjacentElement("afterend", feed);
+    }
+    const line = document.createElement("div");
+    line.className = "activity-line";
+    line.textContent = text;
+    feed.appendChild(line);
+  }
+
+  function buildDocCard(doc) {
+    const a = document.createElement("a");
+    a.className = "doc-card";
+    a.href = doc.url || `/api/documents/${doc.id}/content`;
+    a.target = "_blank";
+    a.rel = "noopener";
+    const icon = document.createElement("span");
+    icon.className = "doc-icon";
+    icon.textContent = "📄";
+    const meta = document.createElement("span");
+    meta.className = "doc-meta";
+    const title = document.createElement("div");
+    title.className = "doc-title";
+    title.textContent = doc.title || "Untitled document";
+    const type = document.createElement("div");
+    type.className = "doc-type";
+    type.textContent = doc.doc_type || "html";
+    meta.appendChild(title);
+    meta.appendChild(type);
+    a.appendChild(icon);
+    a.appendChild(meta);
+    return a;
+  }
+
+  function addDocCard(msgEl, doc) {
+    msgEl.appendChild(buildDocCard(doc));
+  }
+
+  function renderMessage(m, extraClass = "") {
+    const wrap = document.createElement("div");
+    wrap.className = `msg ${m.role} ${extraClass}`.trim();
+    const meta = document.createElement("div");
+    meta.className = "msg-meta";
+    meta.textContent = m.role === "user" ? "You" : "Finance Agent";
+    const body = document.createElement("div");
+    body.className = "msg-body";
+    body.textContent = m.content;
+    wrap.appendChild(meta);
+    wrap.appendChild(body);
+    if (m.attachments && m.attachments.length) {
+      const attRow = document.createElement("div");
+      attRow.className = "msg-attachments";
+      for (const a of m.attachments) {
+        attRow.appendChild(buildAttachmentChip(a));
+      }
+      wrap.appendChild(attRow);
+    }
+    return wrap;
+  }
+
+  async function sendMessage() {
+    const input = el("messageInput");
+    const content = input.value.trim();
+    if ((!content && !state.pendingAttachments.length) || state.activeSessionId === null) return;
+    const sessionId = state.activeSessionId;
+    const attachments = state.pendingAttachments;
+    state.pendingAttachments = [];
+    renderAttachmentsRow();
+
+    input.value = "";
+    input.style.height = "auto";
+    el("sendBtn").disabled = true;
+    input.disabled = true;
+
+    const box = el("messages");
+    if (box.querySelector(".messages-empty")) box.innerHTML = "";
+    box.appendChild(renderMessage({ role: "user", content, attachments }));
+    const assistantEl = renderMessage({ role: "assistant", content: "Thinking…" }, "thinking");
+    box.appendChild(assistantEl);
+    const bodyEl = assistantEl.querySelector(".msg-body");
+    box.scrollTop = box.scrollHeight;
+
+    let accumulated = "";
+
+    try {
+      const res = await fetch(`/api/chat/sessions/${sessionId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          content,
+          model: el("modelSelect").value,
+          effort: el("effortSelect").value,
+          attachments,
+        }),
+      });
+      if (!res.ok || !res.body) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.detail || `Request failed (${res.status})`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalContent = null;
+      let finalTitle = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop();
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const evt = JSON.parse(line);
+          if (evt.type === "delta") {
+            if (accumulated === "") {
+              assistantEl.classList.remove("thinking");
+              bodyEl.textContent = "";
+            }
+            accumulated += evt.text;
+            bodyEl.textContent = accumulated;
+            box.scrollTop = box.scrollHeight;
+          } else if (evt.type === "tool") {
+            addActivityLine(assistantEl, evt.summary || evt.name);
+            box.scrollTop = box.scrollHeight;
+          } else if (evt.type === "notice") {
+            bodyEl.textContent = evt.text;
+          } else if (evt.type === "usage") {
+            setUsageLine(assistantEl, evt);
+          } else if (evt.type === "document") {
+            addDocCard(assistantEl, evt);
+            box.scrollTop = box.scrollHeight;
+          } else if (evt.type === "done") {
+            finalContent = evt.content;
+            finalTitle = evt.title;
+          } else if (evt.type === "error") {
+            throw new Error(evt.message);
+          }
+        }
+      }
+
+      assistantEl.classList.remove("thinking");
+      bodyEl.textContent = finalContent !== null ? finalContent : accumulated;
+
+      if (finalTitle) {
+        const s = state.sessions.find((x) => x.id === sessionId);
+        if (s) {
+          s.title = finalTitle;
+          renderSessionList();
+          el("mainTitle").textContent = s.title;
+        }
+      }
+    } catch (err) {
+      assistantEl.classList.remove("thinking");
+      bodyEl.textContent = "Error: " + err.message;
+    } finally {
+      box.scrollTop = box.scrollHeight;
+      el("sendBtn").disabled = false;
+      input.disabled = false;
+      input.focus();
+      refreshUsageCard(sessionId);
+    }
+  }
+
+  async function openSettings() {
+    el("settingsModal").classList.remove("hidden");
+    el("settingsStatusMsg").textContent = "";
+    el("settingsStatusMsg").classList.remove("error");
+    const rows = el("settingsRows");
+    rows.innerHTML = '<div class="setting-desc">Loading…</div>';
+    try {
+      const items = await api("/api/settings");
+      rows.innerHTML = "";
+      items.forEach((item, idx) => {
+        const row = document.createElement("div");
+        const pairedWithNext = item.group && items[idx + 1]?.group === item.group;
+        row.className = "setting-row" + (pairedWithNext ? " paired" : "");
+
+        const label = document.createElement("div");
+        label.className = "setting-label";
+        label.textContent = item.label;
+        row.appendChild(label);
+
+        const desc = document.createElement("div");
+        desc.className = "setting-desc";
+        desc.textContent = item.description;
+        row.appendChild(desc);
+
+        const current = document.createElement("div");
+        current.className = "setting-current";
+        if (item.source === "unset") {
+          current.innerHTML = '<span class="status-unset">Not set</span>';
+        } else {
+          const sourceLabel = item.source === "override" ? "saved here" : "from .env default";
+          current.innerHTML = `Current: <span class="status-set">${item.masked}</span> (${sourceLabel})`;
+        }
+        row.appendChild(current);
+
+        const input = document.createElement("input");
+        input.type = item.secret ? "password" : "text";
+        input.autocomplete = "off";
+        input.dataset.key = item.key;
+        input.placeholder = "Enter new value…";
+        row.appendChild(input);
+
+        rows.appendChild(row);
+      });
+    } catch (err) {
+      rows.innerHTML = "";
+      el("settingsStatusMsg").textContent = err.message;
+      el("settingsStatusMsg").classList.add("error");
+    }
+  }
+
+  function closeSettings() {
+    el("settingsModal").classList.add("hidden");
+  }
+
+  function fmtDocDate(iso) {
+    try { return new Date(iso).toLocaleString(); } catch (e) { return iso; }
+  }
+
+  async function renderLibraryList() {
+    const list = el("libraryList");
+    list.innerHTML = '<div class="library-empty">Loading…</div>';
+    const scoped = el("libraryFilter").value === "session" && state.activeSessionId !== null;
+    try {
+      const path = scoped ? `/api/documents?session_id=${state.activeSessionId}` : "/api/documents";
+      const docs = await api(path);
+      list.innerHTML = "";
+      if (!docs.length) {
+        list.innerHTML = '<div class="library-empty">No documents yet.</div>';
+        return;
+      }
+      for (const doc of docs) {
+        const row = document.createElement("a");
+        row.className = "library-row";
+        row.href = `/api/documents/${doc.id}/content`;
+        row.target = "_blank";
+        row.rel = "noopener";
+        const main = document.createElement("div");
+        main.className = "library-row-main";
+        const title = document.createElement("div");
+        title.className = "library-row-title";
+        title.textContent = doc.title || "Untitled document";
+        const sub = document.createElement("div");
+        sub.className = "library-row-sub";
+        sub.textContent = `${(doc.doc_type || "html").toUpperCase()} · ${fmtDocDate(doc.created_at)}`;
+        main.appendChild(title);
+        main.appendChild(sub);
+        row.appendChild(main);
+        list.appendChild(row);
+      }
+    } catch (err) {
+      list.innerHTML = `<div class="library-empty">${err.message}</div>`;
+    }
+  }
+
+  function openLibrary() {
+    el("libraryModal").classList.remove("hidden");
+    renderLibraryList();
+  }
+  function closeLibrary() {
+    el("libraryModal").classList.add("hidden");
+  }
+
+  el("libraryBtn").addEventListener("click", openLibrary);
+  el("libraryCloseBtn").addEventListener("click", closeLibrary);
+  el("libraryModal").addEventListener("click", (e) => {
+    if (e.target === el("libraryModal")) closeLibrary();
+  });
+  el("libraryFilter").addEventListener("change", renderLibraryList);
+
+  el("settingsBtn").addEventListener("click", openSettings);
+  el("settingsCloseBtn").addEventListener("click", closeSettings);
+  el("settingsModal").addEventListener("click", (e) => {
+    if (e.target === el("settingsModal")) closeSettings();
+  });
+
+  el("settingsSaveBtn").addEventListener("click", async () => {
+    const inputs = Array.from(el("settingsRows").querySelectorAll("input[data-key]"));
+    const changed = {};
+    for (const input of inputs) {
+      if (input.value.trim()) changed[input.dataset.key] = input.value.trim();
+    }
+    const statusMsg = el("settingsStatusMsg");
+    const saveBtn = el("settingsSaveBtn");
+    if (!Object.keys(changed).length) {
+      statusMsg.textContent = "Nothing to save.";
+      statusMsg.classList.remove("error");
+      return;
+    }
+    saveBtn.disabled = true;
+    statusMsg.textContent = "Saving…";
+    statusMsg.classList.remove("error");
+    try {
+      await api("/api/settings", { method: "PUT", body: JSON.stringify({ settings: changed }) });
+      statusMsg.textContent = "Saved.";
+      await openSettings();
+    } catch (err) {
+      statusMsg.textContent = err.message;
+      statusMsg.classList.add("error");
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+
+  el("sendBtn").addEventListener("click", sendMessage);
+  el("messageInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+  el("messageInput").addEventListener("input", (e) => {
+    e.target.style.height = "auto";
+    e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px";
+  });
+
+  /* ==================== Tutorials ==================== */
+  const svg = (p) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+  const ICONS = {
+    wand: svg(`<path d="M15 4V2M15 16v-2M8 9h2M20 9h2M17.8 11.8 19 13M17.8 6.2 19 5M3 21l9-9M12.2 6.2 11 5"/>`),
+    compare: svg(`<path d="M8 10h.01M12 10h.01M16 10h.01"/><path d="M21 12a8 8 0 0 1-11.2 7.3L3 21l1.7-6.8A8 8 0 1 1 21 12Z"/>`),
+    plus: svg(`<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>`),
+    pencil: svg(`<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>`),
+    shield: svg(`<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/>`),
+    pulse: svg(`<path d="M3 12h4l3 8 4-16 3 8h4"/>`),
+    report: svg(`<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="m9 15 2 2 4-4"/>`),
+    cap: svg(`<path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c0 1 3 3 6 3s6-2 6-3v-5"/>`),
+  };
+
+  // UI chrome strings per language. Default is 中文.
+  const TUT_UI = {
+    zh: { fab: "教程", tutorials: "教程", learnTitle: "了解本应用", learnSub: "简短、适合手机的指南。滑动或点击浏览 — 每篇不到一分钟。", slides: "张幻灯片", back: "上一步", next: "下一步", done: "完成", other: "EN" },
+    en: { fab: "Guide", tutorials: "Tutorials", learnTitle: "Learn the app", learnSub: "Short, mobile-friendly guides. Swipe or tap through — under a minute each.", slides: "slides", back: "Back", next: "Next", done: "Done", other: "中文" },
+  };
+
+  // Returns the current-language variant of a { zh, en } field, or the value
+  // itself if it isn't a translatable object. Falls back across languages.
+  function L(v) {
+    if (v && typeof v === "object" && !Array.isArray(v) && ("zh" in v || "en" in v)) {
+      return v[tut.lang] != null ? v[tut.lang] : (v.zh != null ? v.zh : v.en);
+    }
+    return v;
+  }
+
+  const TUTORIAL_SERIES = [
+    {
+      id: "build-mode",
+      icon: "wand",
+      label: { zh: "构建模式", en: "Build Mode" },
+      tagline: { zh: "把想法变成能运行的计算 — 无需写代码。", en: "Turn an idea into a working calculation — no code." },
+      slides: [
+        {
+          icon: "wand",
+          tag: { zh: "教程", en: "Tutorial" },
+          title: { zh: "构建模式", en: `Build <span class="em">Mode</span>` },
+          body: {
+            zh: `用日常语言，把一个想法变成<b>真实、经过测试、可运行的佣金计算</b> — 完全不用写代码。`,
+            en: `Turn a plain-language idea into a <b>real, tested commission calculation</b> — without writing a line of code.`,
+          },
+        },
+        {
+          icon: "compare",
+          title: { zh: "两种对话方式", en: `Two ways to chat` },
+          body: {
+            zh: `<span class="pill">+ Discuss</span> — 查询你的发票与收款数据。<br><br><span class="pill">+ Build</span> — 创建一个应用能真正运行的计算。`,
+            en: `<span class="pill">+ Discuss</span> — ask questions about your invoices &amp; payments.<br><br><span class="pill">+ Build</span> — create a calculation the app can actually run.`,
+          },
+        },
+        {
+          icon: "plus",
+          title: { zh: "开始一个构建", en: `Start a build` },
+          body: {
+            zh: `点击侧边栏的 <span class="pill">+ Build</span>。对话会显示 <b>Build</b> 标记，并进入专为创建计算而设的界面。`,
+            en: `Tap <span class="pill">+ Build</span> in the sidebar. The chat gets a <b>Build</b> badge and a fresh prompt made for creating calculations.`,
+          },
+        },
+        {
+          icon: "pencil",
+          title: { zh: "只需描述它", en: `Just describe it` },
+          body: { zh: `不用公式，不用代码。用日常语言说出你想要的：`, en: `No formulas, no code. Say what you want in plain words:` },
+          quote: {
+            zh: `“帮我算一下 2026 年 6 月我们业务员的标准太阳能佣金。”`,
+            en: `“Work out the standard solar commission for our agents for June 2026.”`,
+          },
+        },
+        {
+          tag: { zh: "运作方式", en: "How it works" },
+          title: { zh: "分 6 步完成", en: `It builds in 6 steps` },
+          steps: [
+            { t: { zh: "面谈", en: "Interview" }, d: { zh: "它会问清所需信息 — 谁拿佣金、按什么金额、何时触发、层级、进位方式。", en: "It asks what it needs — who earns, on what amount, when it triggers, tiers, rounding." } },
+            { t: { zh: "规格", en: "Spec" }, d: { zh: "它用日常语言写回规则摘要，让你确认。", en: "It writes back a plain-English summary of the rule for you to confirm." } },
+            { t: { zh: "实例", en: "Examples" }, d: { zh: "它调出真实发票并逐笔手算 — 由你核对数字。", en: "It pulls real invoices and computes them by hand — you check the numbers." } },
+            { t: { zh: "构建", en: "Build" }, d: { zh: "它写出真正的计算和测试。", en: "It writes the actual calculation and its tests." } },
+            { t: { zh: "测试", en: "Test" }, d: { zh: "它运行测试并修正，直到全部通过。", en: "It runs the tests and fixes until they pass." } },
+            { t: { zh: "试运行", en: "Dry run" }, d: { zh: "它在真实周期上运行，并展示报告。", en: "It runs on a real period and shows the report." } },
+          ],
+        },
+        {
+          icon: "shield",
+          title: { zh: "它绝不臆测", en: `It never guesses` },
+          body: {
+            zh: `它不会自己编造佣金规则。只要有不清楚的地方，<b>它就会问你</b>。你只需教它一次 — 它会完全照你说的来。`,
+            en: `The agent won't invent a commission rule. If anything is unclear, <b>it asks you</b>. You teach it once — it uses exactly what you said.`,
+          },
+        },
+        {
+          icon: "pulse",
+          title: { zh: "看着它工作", en: `Watch it work` },
+          body: {
+            zh: `你会看到简明的进度，例如 <span class="pill">写入中…</span> <span class="pill">运行测试…</span> — 而不是代码。想看代码？开口问即可。`,
+            en: `You'll see plain progress like <span class="pill">Writing…</span> <span class="pill">Running tests…</span> — not code. Want to see the code? Just ask.`,
+          },
+        },
+        {
+          icon: "report",
+          title: { zh: "然后核对数字", en: `Then check the numbers` },
+          body: {
+            zh: `你会得到一个<b>经过测试的计算</b>和一份报告 — 包含总额，以及背后每一张发票。一键“运行”应用即将推出。`,
+            en: `You get a <b>tested calculation</b> and a report — totals plus the exact invoices behind them. One-click “Run” apps are coming next.`,
+          },
+          cta: { zh: "开始一个构建", en: "Start a Build" },
+        },
+      ],
+    },
+  ];
+
+  const tut = {
+    view: "index",
+    seriesId: null,
+    index: 0,
+    dir: 1,
+    lang: (() => { try { return localStorage.getItem("tutLang") || "zh"; } catch (e) { return "zh"; } })(),
+  };
+  const tutSeries = () => TUTORIAL_SERIES.find((s) => s.id === tut.seriesId);
+
+  function updateFabLabel() {
+    el("tutorialFab").textContent = "🎓 " + TUT_UI[tut.lang].fab;
+  }
+  function setTutLang(lang) {
+    tut.lang = lang;
+    try { localStorage.setItem("tutLang", lang); } catch (e) {}
+    updateFabLabel();
+    renderTutorial();
+  }
+
+  function openTutorial() {
+    tut.view = "index";
+    el("tutorialOverlay").classList.remove("hidden");
+    renderTutorial();
+  }
+  function closeTutorial() {
+    el("tutorialOverlay").classList.add("hidden");
+  }
+  function startSeries(id) {
+    tut.seriesId = id;
+    tut.index = 0;
+    tut.dir = 1;
+    tut.view = "player";
+    renderTutorial();
+  }
+  function tutNext() {
+    if (tut.view !== "player") return;
+    const s = tutSeries();
+    if (tut.index < s.slides.length - 1) { tut.index++; tut.dir = 1; renderTutorial(); }
+  }
+  function tutPrev() {
+    if (tut.view !== "player") return;
+    if (tut.index > 0) { tut.index--; tut.dir = -1; renderTutorial(); }
+  }
+  function tutGoto(i) {
+    if (tut.view !== "player" || i === tut.index) return;
+    tut.dir = i > tut.index ? 1 : -1;
+    tut.index = i;
+    renderTutorial();
+  }
+
+  function slideBody(slide) {
+    let h = "";
+    if (slide.icon) h += `<div class="tut-icon">${ICONS[slide.icon] || ""}</div>`;
+    if (slide.tag) h += `<div class="tut-tag">${L(slide.tag)}</div>`;
+    if (slide.title) h += `<h2 class="tut-title">${L(slide.title)}</h2>`;
+    if (slide.body) h += `<div class="tut-body">${L(slide.body)}</div>`;
+    if (slide.steps) {
+      h += `<div class="tut-steps">`;
+      slide.steps.forEach((st, i) => {
+        h += `<div class="tut-step"><div class="tut-step-num">${i + 1}</div>` +
+             `<div class="tut-step-txt"><b>${L(st.t)}</b><span>${L(st.d)}</span></div></div>`;
+      });
+      h += `</div>`;
+    }
+    if (slide.quote) h += `<div class="tut-quote">${L(slide.quote)}</div>`;
+    return h;
+  }
+
+  function tutTopbar(label) {
+    const ui = TUT_UI[tut.lang];
+    return `<div class="tut-topbar"><span class="tut-series-label">${label}</span>` +
+      `<span class="tut-topbar-right">` +
+      `<button class="tut-lang" data-action="lang" title="Language">${ui.other}</button>` +
+      `<button class="tut-close" data-action="close">&times;</button></span></div>`;
+  }
+
+  function renderTutorial() {
+    const card = el("tutorialCard");
+    const ui = TUT_UI[tut.lang];
+    if (tut.view === "index") {
+      let items = "";
+      for (const s of TUTORIAL_SERIES) {
+        items += `<div class="tut-series-item" data-action="series" data-id="${s.id}">` +
+          `<div class="tut-icon">${ICONS[s.icon] || ""}</div>` +
+          `<div class="tut-series-meta"><b>${L(s.label)}</b><span>${L(s.tagline)}</span>` +
+          `<div class="tut-series-count">${s.slides.length} ${ui.slides}</div></div></div>`;
+      }
+      card.innerHTML =
+        tutTopbar(ui.tutorials) +
+        `<div class="tut-index"><div class="tut-index-title">${ui.learnTitle}</div>` +
+        `<div class="tut-index-sub">${ui.learnSub}</div>` +
+        items + `</div>`;
+      return;
+    }
+
+    const s = tutSeries();
+    const slide = s.slides[tut.index];
+    const n = s.slides.length;
+    const last = tut.index === n - 1;
+
+    let segs = "";
+    for (let i = 0; i < n; i++) {
+      const cls = i < tut.index ? "done" : i === tut.index ? "active" : "";
+      segs += `<div class="tut-seg ${cls}" data-action="goto" data-i="${i}"><i></i></div>`;
+    }
+
+    let nav;
+    if (last && slide.cta) {
+      nav =
+        `<div class="tut-nav" style="flex-direction:column;align-items:stretch;gap:10px;">` +
+        `<button class="tut-btn primary" data-action="cta-build">${L(slide.cta)}</button>` +
+        `<div style="display:flex;align-items:center;justify-content:space-between;">` +
+        `<button class="tut-btn ghost" data-action="prev">${ui.back}</button>` +
+        `<span class="tut-counter">${tut.index + 1} / ${n}</span></div></div>`;
+    } else {
+      nav =
+        `<div class="tut-nav">` +
+        `<button class="tut-btn ghost" data-action="prev" ${tut.index === 0 ? "disabled" : ""}>${ui.back}</button>` +
+        `<div style="display:flex;align-items:center;gap:14px;">` +
+        `<span class="tut-counter">${tut.index + 1} / ${n}</span>` +
+        `<button class="tut-btn primary" data-action="${last ? "close" : "next"}">${last ? ui.done : ui.next}</button>` +
+        `</div></div>`;
+    }
+
+    const topAlign = slide.steps ? "justify-content:flex-start;" : "";
+    card.innerHTML =
+      `<div class="tut-progress">${segs}</div>` +
+      tutTopbar(L(s.label)) +
+      `<div class="tut-stage" style="${topAlign}">` +
+      `<div class="tut-stage-inner" style="--tut-dir:${tut.dir * 22}px">${slideBody(slide)}</div></div>` +
+      nav;
+  }
+
+  el("tutorialFab").addEventListener("click", openTutorial);
+  el("tutorialOverlay").addEventListener("click", (e) => {
+    if (e.target === el("tutorialOverlay")) closeTutorial();
+  });
+  el("tutorialCard").addEventListener("click", (e) => {
+    const target = e.target.closest("[data-action]");
+    if (!target) return;
+    const action = target.dataset.action;
+    if (action === "close") closeTutorial();
+    else if (action === "next") tutNext();
+    else if (action === "prev") tutPrev();
+    else if (action === "goto") tutGoto(Number(target.dataset.i));
+    else if (action === "series") startSeries(target.dataset.id);
+    else if (action === "lang") setTutLang(tut.lang === "zh" ? "en" : "zh");
+    else if (action === "cta-build") { closeTutorial(); createSession("builder"); }
+  });
+  updateFabLabel();
+  document.addEventListener("keydown", (e) => {
+    if (el("tutorialOverlay").classList.contains("hidden")) return;
+    if (e.key === "Escape") closeTutorial();
+    else if (e.key === "ArrowRight") tutNext();
+    else if (e.key === "ArrowLeft") tutPrev();
+  });
+  let tutTouchX = null;
+  el("tutorialCard").addEventListener("touchstart", (e) => {
+    tutTouchX = e.changedTouches[0].clientX;
+  }, { passive: true });
+  el("tutorialCard").addEventListener("touchend", (e) => {
+    if (tutTouchX === null) return;
+    const dx = e.changedTouches[0].clientX - tutTouchX;
+    tutTouchX = null;
+    if (Math.abs(dx) > 45) { dx < 0 ? tutNext() : tutPrev(); }
+  }, { passive: true });
+
+  // Mobile menu toggle
+  const menuToggle = document.getElementById('menuToggle');
+  const sidebar = document.querySelector('.sidebar');
+  const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+  if (menuToggle) {
+    menuToggle.addEventListener('click', () => {
+      sidebar.classList.add('open');
+      sidebarOverlay.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    });
+  }
+
+  if (sidebarOverlay) {
+    sidebarOverlay.addEventListener('click', () => {
+      sidebar.classList.remove('open');
+      sidebarOverlay.classList.remove('open');
+      document.body.style.overflow = '';
+    });
+  }
+
+  boot();
+</script>
+</body>
+</html>

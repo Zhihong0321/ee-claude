@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "finance-agent-web",
+      "runtimeExecutable": ".venv/Scripts/uvicorn.exe",
+      "runtimeArgs": ["app.main:app", "--host", "127.0.0.1", "--port", "28711"],
+      "port": 28711
+    },
+    {
+      "name": "finance-agent-web-stepa",
+      "runtimeExecutable": ".venv/Scripts/uvicorn.exe",
+      "runtimeArgs": ["app.main:app", "--host", "127.0.0.1", "--port", "28715"],
+      "port": 28715
+    },
+    {
+      "name": "finance-agent-web-docs",
+      "runtimeExecutable": ".venv/Scripts/uvicorn.exe",
+      "runtimeArgs": ["app.main:app", "--host", "127.0.0.1", "--port", "28720"],
+      "port": 28720
+    }
+  ]
+}
