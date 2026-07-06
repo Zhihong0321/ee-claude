@@ -41,9 +41,11 @@ ENV PATH=/root/.local/bin:$PATH \
 
 COPY . .
 
-# workspace/ (uploads, documents, specs, decisions, memory, DB_SCHEMA.md) and
-# rules/ are written to at runtime and must live on a mounted Railway volume
-# (mount path: /app/workspace) so they survive redeploys.
+# workspace/ (uploads, documents, specs, decisions, memory, DB_SCHEMA.md) is
+# written to at runtime and must persist across redeploys. Production's
+# Railway volume is mounted at /storage; docker-entrypoint.sh symlinks
+# /app/workspace -> /storage at boot. rules/ (Builder-mode generated code) is
+# not persisted this way - it's expected to be pushed to GitHub instead.
 RUN mkdir -p workspace/uploads workspace/documents workspace/decisions workspace/specs workspace/memory rules
 
 EXPOSE 8080
