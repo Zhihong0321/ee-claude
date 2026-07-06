@@ -11,9 +11,14 @@ APP_UID=10001
 # deploy starts from a fresh image (workspace/ exists as a real directory
 # again, seeded from git) - only /storage survives across deploys.
 if [ -d /storage ] && [ ! -L /app/workspace ]; then
-    if [ -z "$(ls -A /storage 2>/dev/null)" ]; then
-        echo "Seeding empty /storage volume from image's workspace/ ..."
+    # A freshly-formatted volume already contains a `lost+found` directory
+    # (standard ext4/xfs artifact), so a plain "is /storage empty?" check
+    # (ls -A) always sees it as non-empty and skips seeding - use an
+    # explicit marker file instead.
+    if [ ! -e /storage/.seeded ]; then
+        echo "Seeding /storage volume from image's workspace/ ..."
         cp -a /app/workspace/. /storage/
+        touch /storage/.seeded
     fi
     rm -rf /app/workspace
     ln -s /storage /app/workspace
