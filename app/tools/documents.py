@@ -35,14 +35,17 @@ def make_save_document_tool(session_id: int | None, user_id: int | None):
         "library, so it appears as a document in your reply instead of raw text "
         "dumped into chat. Use this for reports, summaries, tables, or any content "
         "worth keeping and revisiting later - not for short conversational answers. "
-        "For 'html', write a complete, well-formatted standalone HTML document "
-        "(it will be rendered in a browser). After saving, briefly mention in your "
-        "normal reply that you created the document; do not repeat its full content "
-        "in chat.",
+        "Use doc_type 'markdown' for anything that's mainly a table or list (invoice "
+        "listings, per-agent breakdowns, etc.), even a large one with dozens of rows "
+        "- it's rendered as a real formatted table, and a plain markdown table is far "
+        "less likely to have a JSON-escaping mistake than a large HTML string full of "
+        "quoted attributes. Only use 'html' for documents that need custom visual "
+        "layout beyond a table. After saving, briefly mention in your normal reply "
+        "that you created the document; do not repeat its full content in chat.",
         {
             "title": Annotated[str, "Short, human-readable title for the document."],
             "content": Annotated[str, "The full document content (HTML or Markdown)."],
-            "doc_type": Annotated[str, "Either 'html' or 'markdown'."],
+            "doc_type": Annotated[str, "Either 'html' or 'markdown' - prefer 'markdown' for tables/lists."],
         },
     )
     async def save_document(args: dict[str, Any]) -> dict[str, Any]:

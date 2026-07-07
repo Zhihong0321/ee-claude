@@ -5,6 +5,7 @@ import time
 import uuid
 from pathlib import Path
 
+import markdown as markdown_lib
 from claude_agent_sdk import (
     AssistantMessage,
     ResultMessage,
@@ -16,7 +17,7 @@ from claude_agent_sdk import (
     query,
 )
 from fastapi import Depends, FastAPI, File, HTTPException, Response, UploadFile, status
-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -310,6 +311,24 @@ async def list_documents(
     ]
 
 
+MARKDOWN_DOC_TEMPLATE = """\
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  body {{ background: #0a0e14; color: #e6e6e6; font: 14.5px/1.65 system-ui, sans-serif;
+         max-width: 900px; margin: 32px auto; padding: 0 20px; }}
+  h1, h2, h3 {{ color: #f2c14e; }}
+  table {{ border-collapse: collapse; width: 100%; margin: 12px 0; }}
+  th, td {{ border: 1px solid #2a3040; padding: 6px 10px; text-align: left; }}
+  th {{ background: #141a24; }}
+  code, pre {{ background: #141a24; padding: 2px 5px; border-radius: 3px; }}
+  a {{ color: #4fc3f7; }}
+</style></head><body>
+{body}
+</body></html>
+"""
+
+
 @app.get("/api/documents/{doc_id}/content")
 async def get_document_content(
     doc_id: int,
@@ -325,7 +344,13 @@ async def get_document_content(
     text = file_path.read_text(encoding="utf-8")
     if doc.doc_type == "html":
         return HTMLResponse(text)
-    return PlainTextResponse(text, media_type="text/markdown")
+    # Render markdown to HTML for viewing (tables/lists/etc.) rather than
+    # dumping raw markdown as plain text - the agent is steered towards
+    # writing tabular reports as markdown (see SYSTEM_PROMPT) since a large
+    # HTML report authored as one quote-heavy JSON string argument is prone
+    # to the model corrupting the JSON escaping mid-generation.
+    body_html = markdown_lib.markdown(text, extensions=["tables", "fenced_code"])
+    return HTMLResponse(MARKDOWN_DOC_TEMPLATE.format(body=body_html))
 
 
 TOOL_START_SUMMARIES = {
