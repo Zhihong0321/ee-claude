@@ -470,6 +470,24 @@
 
   .msg.thinking .msg-body { color: var(--ink-soft); font-style: italic; }
 
+  /* Breathing indicator - shows on the most recent activity line (and the
+     initial "Thinking..." text) so a long, silent stretch (e.g. the model
+     authoring a large report) still visibly reads as "working", not stuck. */
+  @keyframes breathe {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 1; }
+  }
+  .msg.thinking .msg-body,
+  .activity-line.pulsing {
+    animation: breathe 1.3s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .msg.thinking .msg-body,
+    .activity-line.pulsing {
+      animation: none;
+    }
+  }
+
   .composer {
     border-top: 1px solid var(--rule);
     padding: 12px 16px;
@@ -1661,10 +1679,16 @@
       const meta = msgEl.querySelector(".msg-meta");
       meta.insertAdjacentElement("afterend", feed);
     }
+    const prevPulsing = feed.querySelector(".activity-line.pulsing");
+    if (prevPulsing) prevPulsing.classList.remove("pulsing");
     const line = document.createElement("div");
-    line.className = "activity-line";
+    line.className = "activity-line pulsing";
     line.textContent = text;
     feed.appendChild(line);
+  }
+
+  function stopPulsing(msgEl) {
+    msgEl.querySelectorAll(".activity-line.pulsing").forEach((el) => el.classList.remove("pulsing"));
   }
 
   function buildDocCard(doc) {
@@ -1815,6 +1839,7 @@
       assistantEl.classList.remove("thinking");
       bodyEl.textContent = "Error: " + err.message;
     } finally {
+      stopPulsing(assistantEl);
       box.scrollTop = box.scrollHeight;
       el("sendBtn").disabled = false;
       input.disabled = false;
