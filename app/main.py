@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 import uuid
@@ -50,6 +51,7 @@ UPLOADS_DIR = PROJECT_ROOT / "workspace" / "uploads"
 DOCUMENTS_DIR = PROJECT_ROOT / "workspace" / "documents"
 
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB per file
+PING_INTERVAL_SECONDS = 15  # keepalive cadence while the model is silently generating
 
 app = FastAPI(title="EE Finance Agent")
 
@@ -325,6 +327,30 @@ async def get_document_content(
     return PlainTextResponse(text, media_type="text/markdown")
 
 
+TOOL_START_SUMMARIES = {
+    "Bash": "Running a command…",
+    "Write": "Writing a file…",
+    "Edit": "Editing a file…",
+    "Read": "Reading a file…",
+    "Glob": "Searching files…",
+}
+
+
+def _tool_start_summary(name: str) -> str:
+    """A generic label shown the instant a tool call starts generating - before
+    its arguments (which _tool_summary describes) have streamed in. A tool's
+    input can be large (e.g. save_document writing a full report), and no
+    delta events are emitted while it's generated, so without this the UI
+    shows no activity at all for that whole stretch."""
+    if name in TOOL_START_SUMMARIES:
+        return TOOL_START_SUMMARIES[name]
+    if name.endswith("query_finance_db"):
+        return "Querying the database…"
+    if name.endswith("save_document"):
+        return "Writing a document…"
+    return f"Using {name}…"
+
+
 def _tool_summary(block: ToolUseBlock) -> str:
     """A short plain-language description of a tool call, for the activity feed."""
     args = block.input if isinstance(block.input, dict) else {}
@@ -454,48 +480,82 @@ async def send_message(
 
         async def run(options):
             nonlocal output_started, usage_event
-            async for message in query(prompt=prompt, options=options):
-                if isinstance(message, StreamEvent):
-                    event = message.event
-                    if event.get("type") == "content_block_start":
-                        if event.get("content_block", {}).get("type") == "text" and reply_text_parts:
-                            output_started = True
-                            yield json.dumps({"type": "delta", "text": "\n\n"}) + "\n"
-                    elif event.get("type") == "content_block_delta":
-                        delta = event.get("delta", {})
-                        if delta.get("type") == "text_delta" and delta.get("text"):
-                            output_started = True
-                            yield json.dumps({"type": "delta", "text": delta["text"]}) + "\n"
-                elif isinstance(message, AssistantMessage):
-                    for block in message.content:
-                        if isinstance(block, TextBlock):
-                            reply_text_parts.append(block.text)
-                        elif isinstance(block, ToolUseBlock):
-                            # Surface build activity to the UI. Treat a tool call as
-                            # output so a mid-run failure does not re-run the (possibly
-                            # side-effectful) turn on the backup provider.
-                            output_started = True
-                            yield json.dumps(
-                                {"type": "tool", "name": block.name, "summary": _tool_summary(block)}
-                            ) + "\n"
-                elif isinstance(message, UserMessage):
-                    blocks = message.content if isinstance(message.content, list) else []
-                    for block in blocks:
-                        if isinstance(block, ToolResultBlock):
-                            doc_event = _parse_document_event(block)
-                            if doc_event:
-                                yield json.dumps(doc_event) + "\n"
-                elif isinstance(message, ResultMessage):
-                    usage = message.usage or {}
-                    usage_event = {
-                        "type": "usage",
-                        "model": resolved_model,
-                        "input_tokens": usage.get("input_tokens") or 0,
-                        "output_tokens": usage.get("output_tokens") or 0,
-                        "cache_creation_input_tokens": usage.get("cache_creation_input_tokens") or 0,
-                        "cache_read_input_tokens": usage.get("cache_read_input_tokens") or 0,
-                        "cost_usd": estimate_cost_usd(resolved_model, usage),
-                    }
+            agen = query(prompt=prompt, options=options).__aiter__()
+            next_message = asyncio.ensure_future(agen.__anext__())
+            try:
+                while True:
+                    try:
+                        message = await asyncio.wait_for(
+                            asyncio.shield(next_message), timeout=PING_INTERVAL_SECONDS
+                        )
+                    except asyncio.TimeoutError:
+                        # The SDK hasn't produced a message in a while - most
+                        # likely the model is generating a large tool call
+                        # (e.g. save_document writing a full report) with no
+                        # delta events along the way, so the client would
+                        # otherwise see total silence. Send a keepalive so
+                        # proxies/browsers don't treat the connection as idle
+                        # and drop it, leaving the UI stuck forever.
+                        yield json.dumps({"type": "ping"}) + "\n"
+                        continue
+                    except StopAsyncIteration:
+                        break
+                    next_message = asyncio.ensure_future(agen.__anext__())
+
+                    if isinstance(message, StreamEvent):
+                        event = message.event
+                        if event.get("type") == "content_block_start":
+                            block = event.get("content_block", {})
+                            if block.get("type") == "text" and reply_text_parts:
+                                output_started = True
+                                yield json.dumps({"type": "delta", "text": "\n\n"}) + "\n"
+                            elif block.get("type") == "tool_use":
+                                # Announce the tool call the moment it starts,
+                                # not after its full input has streamed in -
+                                # see _tool_start_summary.
+                                output_started = True
+                                name = block.get("name", "")
+                                yield json.dumps(
+                                    {"type": "tool", "name": name, "summary": _tool_start_summary(name)}
+                                ) + "\n"
+                        elif event.get("type") == "content_block_delta":
+                            delta = event.get("delta", {})
+                            if delta.get("type") == "text_delta" and delta.get("text"):
+                                output_started = True
+                                yield json.dumps({"type": "delta", "text": delta["text"]}) + "\n"
+                    elif isinstance(message, AssistantMessage):
+                        for block in message.content:
+                            if isinstance(block, TextBlock):
+                                reply_text_parts.append(block.text)
+                            elif isinstance(block, ToolUseBlock):
+                                # Surface build activity to the UI. Treat a tool call as
+                                # output so a mid-run failure does not re-run the (possibly
+                                # side-effectful) turn on the backup provider.
+                                output_started = True
+                                yield json.dumps(
+                                    {"type": "tool", "name": block.name, "summary": _tool_summary(block)}
+                                ) + "\n"
+                    elif isinstance(message, UserMessage):
+                        blocks = message.content if isinstance(message.content, list) else []
+                        for block in blocks:
+                            if isinstance(block, ToolResultBlock):
+                                doc_event = _parse_document_event(block)
+                                if doc_event:
+                                    yield json.dumps(doc_event) + "\n"
+                    elif isinstance(message, ResultMessage):
+                        usage = message.usage or {}
+                        usage_event = {
+                            "type": "usage",
+                            "model": resolved_model,
+                            "input_tokens": usage.get("input_tokens") or 0,
+                            "output_tokens": usage.get("output_tokens") or 0,
+                            "cache_creation_input_tokens": usage.get("cache_creation_input_tokens") or 0,
+                            "cache_read_input_tokens": usage.get("cache_read_input_tokens") or 0,
+                            "cost_usd": estimate_cost_usd(resolved_model, usage),
+                        }
+            finally:
+                if not next_message.done():
+                    next_message.cancel()
 
         try:
             primary_options = build_options(
