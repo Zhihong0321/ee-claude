@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+import time
 import uuid
 from pathlib import Path
 
@@ -480,6 +481,23 @@ async def send_message(
 
         async def run(options):
             nonlocal output_started, usage_event
+            # DEBUG(temp): tracing a stall where the chat stream stops making
+            # progress mid-turn. Logs every SDK message with elapsed/delta
+            # timing to stdout (visible via `railway logs`) so the next
+            # occurrence pinpoints whether the model is still generating, a
+            # tool call is hung executing, or nothing more ever arrives.
+            # Remove this whole block (search "DEBUG(temp)") once resolved.
+            dbg_t0 = time.monotonic()
+            dbg_last = [dbg_t0]
+
+            def dbg(msg: str) -> None:
+                now = time.monotonic()
+                print(
+                    f"[chat-debug] +{now - dbg_t0:6.1f}s (Δ{now - dbg_last[0]:5.1f}s) {msg}",
+                    flush=True,
+                )
+                dbg_last[0] = now
+
             agen = query(prompt=prompt, options=options).__aiter__()
             next_message = asyncio.ensure_future(agen.__anext__())
             try:
@@ -496,9 +514,11 @@ async def send_message(
                         # otherwise see total silence. Send a keepalive so
                         # proxies/browsers don't treat the connection as idle
                         # and drop it, leaving the UI stuck forever.
+                        dbg("no SDK message yet (ping)")
                         yield json.dumps({"type": "ping"}) + "\n"
                         continue
                     except StopAsyncIteration:
+                        dbg("agen exhausted (StopAsyncIteration)")
                         break
                     next_message = asyncio.ensure_future(agen.__anext__())
 
@@ -506,6 +526,7 @@ async def send_message(
                         event = message.event
                         if event.get("type") == "content_block_start":
                             block = event.get("content_block", {})
+                            dbg(f"content_block_start type={block.get('type')} name={block.get('name')}")
                             if block.get("type") == "text" and reply_text_parts:
                                 output_started = True
                                 yield json.dumps({"type": "delta", "text": "\n\n"}) + "\n"
@@ -523,7 +544,10 @@ async def send_message(
                             if delta.get("type") == "text_delta" and delta.get("text"):
                                 output_started = True
                                 yield json.dumps({"type": "delta", "text": delta["text"]}) + "\n"
+                        elif event.get("type") in ("content_block_stop", "message_delta", "message_stop"):
+                            dbg(f"{event.get('type')} extra={ {k: v for k, v in event.items() if k not in ('type',)} }")
                     elif isinstance(message, AssistantMessage):
+                        dbg(f"AssistantMessage blocks={[type(b).__name__ for b in message.content]}")
                         for block in message.content:
                             if isinstance(block, TextBlock):
                                 reply_text_parts.append(block.text)
@@ -532,6 +556,7 @@ async def send_message(
                                 # output so a mid-run failure does not re-run the (possibly
                                 # side-effectful) turn on the backup provider.
                                 output_started = True
+                                dbg(f"ToolUseBlock name={block.name} input_keys={list(block.input) if isinstance(block.input, dict) else block.input}")
                                 yield json.dumps(
                                     {"type": "tool", "name": block.name, "summary": _tool_summary(block)}
                                 ) + "\n"
@@ -539,10 +564,13 @@ async def send_message(
                         blocks = message.content if isinstance(message.content, list) else []
                         for block in blocks:
                             if isinstance(block, ToolResultBlock):
+                                text_len = len(_tool_result_text(block))
+                                dbg(f"ToolResultBlock is_error={block.is_error} text_len={text_len}")
                                 doc_event = _parse_document_event(block)
                                 if doc_event:
                                     yield json.dumps(doc_event) + "\n"
                     elif isinstance(message, ResultMessage):
+                        dbg(f"ResultMessage subtype={getattr(message, 'subtype', None)}")
                         usage = message.usage or {}
                         usage_event = {
                             "type": "usage",
@@ -554,6 +582,7 @@ async def send_message(
                             "cost_usd": estimate_cost_usd(resolved_model, usage),
                         }
             finally:
+                dbg("run() exiting")
                 if not next_message.done():
                     next_message.cancel()
 

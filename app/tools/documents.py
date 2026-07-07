@@ -7,6 +7,7 @@ tool signature itself has no access to FastAPI's request context.
 """
 
 import json
+import time
 import uuid
 from pathlib import Path
 from typing import Annotated, Any
@@ -45,9 +46,15 @@ def make_save_document_tool(session_id: int | None, user_id: int | None):
         },
     )
     async def save_document(args: dict[str, Any]) -> dict[str, Any]:
+        # DEBUG(temp): tracing a stall that happens right around report
+        # generation - this proves whether the tool handler itself (file
+        # write / DB commit) is what hangs, vs. the model never finishing the
+        # call. Remove once resolved (search "DEBUG(temp)").
+        t0 = time.monotonic()
         title = _safe_title(str(args.get("title", "")))
         content = args.get("content", "")
         doc_type = str(args.get("doc_type", "html")).lower()
+        print(f"[save_document-debug] enter title={title!r} doc_type={doc_type} content_len={len(content)}", flush=True)
         if doc_type not in DOC_EXTENSIONS:
             return {
                 "content": [{"type": "text", "text": "doc_type must be 'html' or 'markdown'."}],
@@ -63,6 +70,7 @@ def make_save_document_tool(session_id: int | None, user_id: int | None):
         ext = DOC_EXTENSIONS[doc_type]
         stored_name = f"{uuid.uuid4().hex}.{ext}"
         (DOCUMENTS_DIR / stored_name).write_text(content, encoding="utf-8")
+        print(f"[save_document-debug] +{time.monotonic() - t0:.1f}s file written", flush=True)
 
         async with SessionLocal() as db:
             doc = Document(
@@ -76,6 +84,7 @@ def make_save_document_tool(session_id: int | None, user_id: int | None):
             await db.commit()
             await db.refresh(doc)
             doc_id = doc.id
+        print(f"[save_document-debug] +{time.monotonic() - t0:.1f}s db committed doc_id={doc_id}", flush=True)
 
         marker = json.dumps({"document_id": doc_id, "title": title, "doc_type": doc_type})
         return {
